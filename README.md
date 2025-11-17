@@ -21,11 +21,13 @@
 
 ## ビルド方法
 
-### 必要なもの
+### ローカル環境でのビルド
+
+#### 必要なもの
 
 - [GBDK (GameBoy Developers Kit)](https://github.com/gbdk-2020/gbdk-2020)
 
-### コンパイル
+#### コンパイル
 
 ```bash
 make
@@ -33,11 +35,24 @@ make
 
 これで`surinuke-gb.gb`ファイルが生成されます。
 
-### クリーンアップ
+#### クリーンアップ
 
 ```bash
 make clean
 ```
+
+### Dockerを使用したビルド
+
+Dockerがインストールされている環境では、以下のコマンドでビルドできます：
+
+```bash
+docker build -t surinuke-gb-builder .
+docker run --rm -v $(pwd):/work surinuke-gb-builder
+```
+
+### GitHub Actionsによる自動ビルド
+
+このリポジトリはGitHub Actionsによる自動ビルドに対応しています。`main`または`master`ブランチへのプッシュ時に自動的にビルドされ、生成されたROMファイルはArtifactとしてダウンロード可能です。
 
 ## 実行方法
 

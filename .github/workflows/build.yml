@@ -1,0 +1,31 @@
+name: Build Game Boy ROM
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup GBDK
+      run: |
+        wget https://github.com/gbdk-2020/gbdk-2020/releases/download/4.1.1/gbdk-linux64.tar.gz
+        tar -xzf gbdk-linux64.tar.gz
+        echo "$PWD/gbdk/bin" >> $GITHUB_PATH
+
+    - name: Build ROM
+      run: make
+
+    - name: Upload ROM artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: surinuke-gb-rom
+        path: surinuke-gb.gb
+        if-no-files-found: error
