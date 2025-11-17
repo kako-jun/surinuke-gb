@@ -1,0 +1,27 @@
+# Object files
+*.o
+*.obj
+
+# Executables
+*.gb
+*.gbc
+
+# Linker output
+*.lst
+*.map
+*.sym
+
+# Build directories
+build/
+dist/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
