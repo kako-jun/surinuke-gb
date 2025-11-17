@@ -95,7 +95,10 @@ void init_player() {
     player.sprite_id = 0;
 
     set_sprite_tile(player.sprite_id, 0);
-    set_sprite_prop(player.sprite_id, 0x00);  // パレット0（シアン）を使用
+    // Game Boy Colorでのみカラーパレットを設定
+    if (_cpu == CGB_TYPE) {
+        set_sprite_prop(player.sprite_id, 0x00);  // パレット0（シアン）を使用
+    }
     move_sprite(player.sprite_id, player.x, PLAYER_Y);
 }
 
@@ -106,7 +109,10 @@ void init_asteroid() {
     asteroid.x = 0;
     asteroid.y = 0;
     set_sprite_tile(asteroid.sprite_id, 1);
-    set_sprite_prop(asteroid.sprite_id, 0x10);  // パレット1（赤）を使用
+    // Game Boy Colorでのみカラーパレットを設定
+    if (_cpu == CGB_TYPE) {
+        set_sprite_prop(asteroid.sprite_id, 0x10);  // パレット1（赤）を使用
+    }
     move_sprite(asteroid.sprite_id, 0, 0);
 }
 
@@ -186,30 +192,37 @@ void draw_walls() {
         set_bkg_tiles(14, i, 1, 1, (uint8_t[]){1}); // 右の壁
     }
 
-    // VRAMバンク1に切り替えて属性を設定（壁をパレット1に）
-    VBK_REG = 1;
-    for (i = 0; i < 18; i++) {
-        set_bkg_tiles(5, i, 1, 1, (uint8_t[]){1});  // 左の壁の属性（パレット1）
-        set_bkg_tiles(14, i, 1, 1, (uint8_t[]){1}); // 右の壁の属性（パレット1）
+    // Game Boy Colorでのみ壁の色属性を設定
+    if (_cpu == CGB_TYPE) {
+        // VRAMバンク1に切り替えて属性を設定（壁をパレット1に）
+        VBK_REG = 1;
+        for (i = 0; i < 18; i++) {
+            set_bkg_tiles(5, i, 1, 1, (uint8_t[]){1});  // 左の壁の属性（パレット1）
+            set_bkg_tiles(14, i, 1, 1, (uint8_t[]){1}); // 右の壁の属性（パレット1）
+        }
+        VBK_REG = 0;
     }
-    VBK_REG = 0;
 
     SHOW_BKG;
 }
 
-// パレット設定
+// パレット設定（Game Boy Color専用）
 void setup_palette() {
-    // スプライトパレット0: プレイヤー（シアン - 明るく目立つ）
-    set_sprite_palette(0, 0, RGB(0, 31, 31));
+    // Game Boy Colorでのみカラーパレットを設定
+    if (_cpu == CGB_TYPE) {
+        // スプライトパレット0: プレイヤー（シアン - 明るく目立つ）
+        set_sprite_palette(0, 0, RGB(0, 31, 31));
 
-    // スプライトパレット1: 敵（赤 - 危険な色で目立つ）
-    set_sprite_palette(1, 0, RGB(31, 0, 0));
+        // スプライトパレット1: 敵（赤 - 危険な色で目立つ）
+        set_sprite_palette(1, 0, RGB(31, 0, 0));
 
-    // 背景パレット0: スコア表示用（黄色 - 見やすい）
-    set_bkg_palette(0, 0, RGB(31, 31, 0));
+        // 背景パレット0: スコア表示用（黄色 - 見やすい）
+        set_bkg_palette(0, 0, RGB(31, 31, 0));
 
-    // 背景パレット1: 壁用（グレー - 控えめ）
-    set_bkg_palette(1, 0, RGB(12, 12, 12));
+        // 背景パレット1: 壁用（グレー - 控えめ）
+        set_bkg_palette(1, 0, RGB(12, 12, 12));
+    }
+    // 通常のGame Boyではモノクロで表示される
 }
 
 // ゲーム初期化
