@@ -26,6 +26,18 @@ const uint8_t asterisk_sprite[] = {
     0x00, 0x00   // ........
 };
 
+// 壁用背景タイル（縦線）
+const uint8_t wall_tile[] = {
+    0xFF, 0xFF,  // ########
+    0xFF, 0xFF,  // ########
+    0xFF, 0xFF,  // ########
+    0xFF, 0xFF,  // ########
+    0xFF, 0xFF,  // ########
+    0xFF, 0xFF,  // ########
+    0xFF, 0xFF,  // ########
+    0xFF, 0xFF   // ########
+};
+
 // ゲーム定数
 #define GAME_AREA_LEFT 48    // ゲーム領域左端（中央寄せ）
 #define GAME_AREA_RIGHT 112  // ゲーム領域右端（幅64ピクセル）
@@ -154,9 +166,25 @@ void check_collision() {
     }
 }
 
-// スコア表示
+// スコア表示（画面下部中央に数字のみ）
 void display_score() {
-    printf("\x1B[0;0HScore:%u", score);
+    printf("\x1B[17;9H%u", score);
+}
+
+// 壁の描画
+void draw_walls() {
+    uint8_t i;
+
+    // 背景タイルデータを設定（タイル1に壁を設定）
+    set_bkg_data(1, 1, wall_tile);
+
+    // 左右の壁を画面全体に描画
+    for (i = 0; i < 18; i++) {
+        set_bkg_tiles(5, i, 1, 1, (uint8_t[]){1});  // 左の壁
+        set_bkg_tiles(14, i, 1, 1, (uint8_t[]){1}); // 右の壁
+    }
+
+    SHOW_BKG;
 }
 
 // パレット設定
@@ -183,6 +211,9 @@ void init_game() {
     // サウンド初期化
     init_sound();
 
+    // 壁を描画
+    draw_walls();
+
     // パレット設定（CGB用）
     setup_palette();
 
@@ -199,7 +230,7 @@ void init_game() {
 // ゲームオーバー画面
 void show_game_over() {
     printf("\x1B[8;6HGAME OVER");
-    printf("\x1B[10;5HScore: %u", score);
+    printf("\x1B[10;9H%u", score);
     printf("\x1B[12;4HPress Any Key");
 
     while (1) {
@@ -213,6 +244,7 @@ void show_game_over() {
             init_player();
             init_asteroid();
             cls();
+            draw_walls();  // 壁を再描画
             break;
         }
         wait_vbl_done();
