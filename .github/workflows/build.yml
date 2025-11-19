@@ -20,6 +20,7 @@ jobs:
         tar -xzf gbdk-linux64.tar.gz
         export GBDK_HOME="$PWD/gbdk"
         echo "GBDK_HOME=$GBDK_HOME" >> "$GITHUB_ENV"
+        echo "GBDKDIR=$GBDK_HOME" >> "$GITHUB_ENV" # lcc uses GBDKDIR as base path
         echo "$GBDK_HOME/bin" >> "$GITHUB_PATH"
 
     - name: Build ROM
