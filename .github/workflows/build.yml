@@ -18,7 +18,9 @@ jobs:
       run: |
         wget https://github.com/gbdk-2020/gbdk-2020/releases/download/4.1.1/gbdk-linux64.tar.gz
         tar -xzf gbdk-linux64.tar.gz
-        echo "$PWD/gbdk/bin" >> $GITHUB_PATH
+        export GBDK_HOME="$PWD/gbdk"
+        echo "GBDK_HOME=$GBDK_HOME" >> "$GITHUB_ENV"
+        echo "$GBDK_HOME/bin" >> "$GITHUB_PATH"
 
     - name: Build ROM
       run: make
