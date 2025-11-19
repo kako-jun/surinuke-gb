@@ -1,6 +1,8 @@
 #include <gb/gb.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <gb/cgb.h>
+#include <gbdk/console.h>
 
 // アンパサンド(&)スプライト
 const uint8_t player_sprite[] = {
@@ -37,6 +39,7 @@ const uint8_t wall_tile[] = {
     0xFF, 0xFF,  // ########
     0xFF, 0xFF   // ########
 };
+static const uint8_t WALL_TILE_IDX[1] = {1};
 
 // ゲーム定数
 #define GAME_AREA_LEFT 48    // ゲーム領域左端（中央寄せ）
@@ -188,8 +191,8 @@ void draw_walls() {
 
     // 左右の壁を画面全体に描画（タイル設定）
     for (i = 0; i < 18; i++) {
-        set_bkg_tiles(5, i, 1, 1, (uint8_t[]){1});  // 左の壁
-        set_bkg_tiles(14, i, 1, 1, (uint8_t[]){1}); // 右の壁
+        set_bkg_tiles(5, i, 1, 1, WALL_TILE_IDX);  // 左の壁
+        set_bkg_tiles(14, i, 1, 1, WALL_TILE_IDX); // 右の壁
     }
 
     // Game Boy Colorでのみ壁の色属性を設定
@@ -197,8 +200,8 @@ void draw_walls() {
         // VRAMバンク1に切り替えて属性を設定（壁をパレット1に）
         VBK_REG = 1;
         for (i = 0; i < 18; i++) {
-            set_bkg_tiles(5, i, 1, 1, (uint8_t[]){1});  // 左の壁の属性（パレット1）
-            set_bkg_tiles(14, i, 1, 1, (uint8_t[]){1}); // 右の壁の属性（パレット1）
+            set_bkg_tiles(5, i, 1, 1, WALL_TILE_IDX);  // 左の壁の属性（パレット1）
+            set_bkg_tiles(14, i, 1, 1, WALL_TILE_IDX); // 右の壁の属性（パレット1）
         }
         VBK_REG = 0;
     }
@@ -210,17 +213,22 @@ void draw_walls() {
 void setup_palette() {
     // Game Boy Colorでのみカラーパレットを設定
     if (_cpu == CGB_TYPE) {
+        static const uint16_t sprite_palette_player[] = { RGB(0, 31, 31) };
+        static const uint16_t sprite_palette_enemy[] = { RGB(31, 0, 0) };
+        static const uint16_t bkg_palette_score[] = { RGB(31, 31, 0) };
+        static const uint16_t bkg_palette_wall[] = { RGB(12, 12, 12) };
+
         // スプライトパレット0: プレイヤー（シアン - 明るく目立つ）
-        set_sprite_palette(0, 0, RGB(0, 31, 31));
+        set_sprite_palette(0, 1, sprite_palette_player);
 
         // スプライトパレット1: 敵（赤 - 危険な色で目立つ）
-        set_sprite_palette(1, 0, RGB(31, 0, 0));
+        set_sprite_palette(1, 1, sprite_palette_enemy);
 
         // 背景パレット0: スコア表示用（黄色 - 見やすい）
-        set_bkg_palette(0, 0, RGB(31, 31, 0));
+        set_bkg_palette(0, 1, bkg_palette_score);
 
         // 背景パレット1: 壁用（グレー - 控えめ）
-        set_bkg_palette(1, 0, RGB(12, 12, 12));
+        set_bkg_palette(1, 1, bkg_palette_wall);
     }
     // 通常のGame Boyではモノクロで表示される
 }
