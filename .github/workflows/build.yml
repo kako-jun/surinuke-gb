@@ -24,7 +24,7 @@ jobs:
       run: make
 
     - name: Upload ROM artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: surinuke-gb-rom
         path: surinuke-gb.gb
