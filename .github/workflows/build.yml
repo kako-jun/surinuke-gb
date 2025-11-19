@@ -19,14 +19,15 @@ jobs:
         wget https://github.com/gbdk-2020/gbdk-2020/releases/download/4.1.1/gbdk-linux64.tar.gz
         tar -xzf gbdk-linux64.tar.gz
         export GBDK_HOME="$PWD/gbdk"
+        export GBDKDIR="$GBDK_HOME/" # lcc expects trailing slash
         echo "GBDK_HOME=$GBDK_HOME" >> "$GITHUB_ENV"
-        echo "GBDKDIR=$GBDK_HOME" >> "$GITHUB_ENV" # lcc uses GBDKDIR as base path
-        echo "$GBDK_HOME/bin" >> "$GITHUB_PATH"
+        echo "GBDKDIR=$GBDKDIR" >> "$GITHUB_ENV"
+        echo "$GBDKDIR/bin" >> "$GITHUB_PATH"
 
     - name: Build ROM
       run: |
-        export GBDKDIR="${GBDKDIR:-$GITHUB_WORKSPACE/gbdk}"
-        export PATH="$GBDKDIR/bin:$PATH"
+        export GBDKDIR="${GBDKDIR:-$GITHUB_WORKSPACE/gbdk/}"
+        export PATH="${GBDKDIR}bin:$PATH"
         make
 
     - name: Upload ROM artifact
