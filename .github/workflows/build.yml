@@ -24,7 +24,10 @@ jobs:
         echo "$GBDK_HOME/bin" >> "$GITHUB_PATH"
 
     - name: Build ROM
-      run: make
+      run: |
+        export GBDKDIR="${GBDKDIR:-$GITHUB_WORKSPACE/gbdk}"
+        export PATH="$GBDKDIR/bin:$PATH"
+        make
 
     - name: Upload ROM artifact
       uses: actions/upload-artifact@v4
