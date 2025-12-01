@@ -179,7 +179,8 @@ void check_collision() {
 
 // スコア表示（画面下部中央に数字のみ）
 void display_score() {
-    printf("\x1B[17;9H%u", score);
+    gotoxy(9, 17);
+    printf("%u  ", score);  // 末尾スペースで前の桁を消去
 }
 
 // 壁の描画
