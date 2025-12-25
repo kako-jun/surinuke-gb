@@ -27,3 +27,4 @@ dist/
 Thumbs.db
 .claude/settings.local.json
 .serena/
+.mcp.json
