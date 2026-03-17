@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y \
 
 # GBDKのダウンロードとインストール
 WORKDIR /opt
-RUN wget https://github.com/gbdk-2020/gbdk-2020/releases/download/4.1.1/gbdk-linux64.tar.gz \
+RUN wget https://github.com/gbdk-2020/gbdk-2020/releases/download/4.3.0/gbdk-linux64.tar.gz \
     && tar -xzf gbdk-linux64.tar.gz \
     && rm gbdk-linux64.tar.gz
 

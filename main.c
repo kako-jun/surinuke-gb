@@ -16,14 +16,14 @@ const uint8_t player_sprite[] = {
     0x00, 0x00   // ........
 };
 
-// アスタリスク(*)スプライト
+// アスタリスク(*)スプライト（中央寄せ）
 const uint8_t asterisk_sprite[] = {
     0x00, 0x00,  // ........
-    0x88, 0x88,  // #...#...
-    0x50, 0x50,  // .#.#....
-    0x20, 0x20,  // ..#.....
-    0x50, 0x50,  // .#.#....
-    0x88, 0x88,  // #...#...
+    0x49, 0x49,  // .#..#..#
+    0x2A, 0x2A,  // ..#.#.#.
+    0x1C, 0x1C,  // ...###..
+    0x2A, 0x2A,  // ..#.#.#.
+    0x49, 0x49,  // .#..#..#
     0x00, 0x00,  // ........
     0x00, 0x00   // ........
 };
@@ -42,8 +42,8 @@ const uint8_t wall_tile[] = {
 static const uint8_t WALL_TILE_IDX[1] = {1};
 
 // ゲーム定数
-#define GAME_AREA_LEFT 48    // ゲーム領域左端（中央寄せ）
-#define GAME_AREA_RIGHT 112  // ゲーム領域右端（幅64ピクセル）
+#define GAME_AREA_LEFT 56    // ゲーム領域左端（左壁タイルの右隣）
+#define GAME_AREA_RIGHT 104  // ゲーム領域右端（右壁タイルの左隣、スプライト幅考慮）
 #define PLAYER_SPEED 2
 #define ASTEROID_SPEED 1
 #define PLAYER_Y 144         // 画面下端から1マス離れた位置
@@ -70,9 +70,16 @@ uint8_t game_over;
 uint16_t frame_count;
 uint8_t sound_timer;
 
-// 疑似乱数生成（簡易版）
+// 疑似乱数生成（DIV_REGで初期シードにエントロピーを追加）
 uint8_t rand_seed = 42;
+uint8_t rand_seeded = 0;
+
 uint8_t simple_rand() {
+    // 初回呼び出し時にDIVレジスタ（タイマー）でシードを撹拌
+    if (!rand_seeded) {
+        rand_seed ^= DIV_REG;
+        rand_seeded = 1;
+    }
     rand_seed = (rand_seed * 73 + 17) % 251;
     return rand_seed;
 }
@@ -94,7 +101,7 @@ void play_click_sound() {
 
 // プレイヤー初期化
 void init_player() {
-    player.x = 80;  // 中央
+    player.x = (GAME_AREA_LEFT + GAME_AREA_RIGHT) / 2;  // ゲーム領域の中央
     player.sprite_id = 0;
 
     set_sprite_tile(player.sprite_id, 0);
@@ -211,27 +218,33 @@ void draw_walls() {
 }
 
 // パレット設定（Game Boy Color専用）
+// GBCパレットは4色構成: [色0, 色1, 色2, 色3]
+// スプライトの色0は常に透明。タイルデータで両ビットプレーンが同値の場合、色3が使われる
 void setup_palette() {
-    // Game Boy Colorでのみカラーパレットを設定
     if (_cpu == CGB_TYPE) {
-        static const uint16_t sprite_palette_player[] = { RGB(0, 31, 31) };
-        static const uint16_t sprite_palette_enemy[] = { RGB(31, 0, 0) };
-        static const uint16_t bkg_palette_score[] = { RGB(31, 31, 0) };
-        static const uint16_t bkg_palette_wall[] = { RGB(12, 12, 12) };
+        // スプライトパレット0: プレイヤー（シアン）
+        // 色0=透明, 色1=暗シアン, 色2=シアン, 色3=明シアン（実際に表示される色）
+        static const uint16_t sprite_palette_player[] = {
+            RGB(0, 0, 0), RGB(0, 16, 16), RGB(0, 24, 24), RGB(0, 31, 31)
+        };
+        // スプライトパレット1: 敵（赤）
+        static const uint16_t sprite_palette_enemy[] = {
+            RGB(0, 0, 0), RGB(16, 0, 0), RGB(24, 0, 0), RGB(31, 0, 0)
+        };
+        // 背景パレット0: スコア表示用（黒背景に黄色テキスト）
+        static const uint16_t bkg_palette_score[] = {
+            RGB(0, 0, 0), RGB(31, 31, 0), RGB(20, 20, 0), RGB(31, 31, 16)
+        };
+        // 背景パレット1: 壁用（グレー系）
+        static const uint16_t bkg_palette_wall[] = {
+            RGB(0, 0, 0), RGB(8, 8, 8), RGB(16, 16, 16), RGB(12, 12, 12)
+        };
 
-        // スプライトパレット0: プレイヤー（シアン - 明るく目立つ）
         set_sprite_palette(0, 1, sprite_palette_player);
-
-        // スプライトパレット1: 敵（赤 - 危険な色で目立つ）
         set_sprite_palette(1, 1, sprite_palette_enemy);
-
-        // 背景パレット0: スコア表示用（黄色 - 見やすい）
         set_bkg_palette(0, 1, bkg_palette_score);
-
-        // 背景パレット1: 壁用（グレー - 控えめ）
         set_bkg_palette(1, 1, bkg_palette_wall);
     }
-    // 通常のGame Boyではモノクロで表示される
 }
 
 // ゲーム初期化
@@ -265,22 +278,31 @@ void init_game() {
 
 // ゲームオーバー画面
 void show_game_over() {
+    // アスタリスクスプライトを画面外に退避
+    move_sprite(asteroid.sprite_id, 0, 0);
+    asteroid.active = 0;
+
     printf("\x1B[8;6HGAME OVER");
     printf("\x1B[10;9H%u", score);
     printf("\x1B[12;4HPress Any Key");
 
+    // ボタンが離されるまで待つ（即リスタート防止）
+    while (joypad()) {
+        wait_vbl_done();
+    }
+
+    // ボタン入力を待つ
     while (1) {
         uint8_t joypad_state = joypad();
-        // どのボタンでもリトライ可能
         if (joypad_state) {
-            // ゲームをリセット
             score = 0;
             game_over = 0;
             frame_count = 0;
+            rand_seeded = 0;  // 次のゲームで新しいシードを使う
             init_player();
             init_asteroid();
             cls();
-            draw_walls();  // 壁を再描画
+            draw_walls();
             break;
         }
         wait_vbl_done();
