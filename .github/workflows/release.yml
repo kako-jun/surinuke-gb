@@ -1,0 +1,63 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup GBDK
+      run: |
+        wget -q https://github.com/gbdk-2020/gbdk-2020/releases/download/4.3.0/gbdk-linux64.tar.gz
+        tar -xzf gbdk-linux64.tar.gz
+        export GBDK_HOME="$PWD/gbdk"
+        export GBDKDIR="$GBDK_HOME/"
+        echo "GBDK_HOME=$GBDK_HOME" >> "$GITHUB_ENV"
+        echo "GBDKDIR=$GBDKDIR" >> "$GITHUB_ENV"
+        echo "${GBDKDIR}bin" >> "$GITHUB_PATH"
+
+    - name: Build ROM
+      run: |
+        export GBDKDIR="${GBDKDIR:-$GITHUB_WORKSPACE/gbdk/}"
+        export PATH="${GBDKDIR}bin:$PATH"
+        make
+
+    - name: Get version from tag
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ steps.get_version.outputs.VERSION }}
+        name: surinuke-gb ${{ steps.get_version.outputs.VERSION }}
+        body: |
+          ## surinuke-gb ${{ steps.get_version.outputs.VERSION }}
+
+          Game Boy / Game Boy Color ROM — dodge falling asterisks in a narrow corridor.
+
+          ### Download
+          Download `surinuke-gb.gb` and run it with your favorite Game Boy emulator (SameBoy, BGB, mGBA, etc.) or flash it to a real cartridge.
+
+          ### Controls
+          - **D-Pad Left/Right**: Move player
+          - **START**: Begin game / Restart after game over
+
+          ### Features
+          - 6-level difficulty scaling (speed, spawn rate, obstacle count)
+          - GBC color support with DMG monochrome fallback
+          - LFSR-based pseudo-random obstacle generation
+        files: |
+          surinuke-gb.gb
+        draft: false
+        prerelease: false
