@@ -165,7 +165,8 @@ void init_enemies(void) {
     for (i = 0; i < MAX_ENEMIES; i++) {
         enemies[i].sprite_id = i + 1;
         enemies[i].lane = game_rand() % NUM_LANES;
-        enemies[i].y = 16 + i * LANE_WIDTH;  // 等間隔で配置
+        // 画面上部から等間隔（y=0は画面外16px上、y=16が画面上端）
+        enemies[i].y = i * LANE_WIDTH;  // 0, 8, 16, 24, 32, 40
         set_sprite_tile(enemies[i].sprite_id, 1);
         if (_cpu == CGB_TYPE) {
             set_sprite_prop(enemies[i].sprite_id, 0x10);
@@ -215,33 +216,47 @@ void show_title(void) {
     }
 }
 
-// ======== 難易度 ========
+// ======== 難易度（緩やかなカーブ） ========
 void update_difficulty(void) {
-    if (score < 10) {
+    if (score < 20) {
         fall_speed = 1;
-    } else if (score < 30) {
+    } else if (score < 50) {
         fall_speed = 2;
-    } else if (score < 60) {
+    } else if (score < 100) {
         fall_speed = 3;
     } else {
         fall_speed = 4;
     }
 }
 
-// ======== プレイヤー更新（滑らかなピクセル移動、マス判定は離散） ========
+// ======== プレイヤー更新 ========
+// キー押下中: 滑らかにピクセル移動
+// キーを離した瞬間: 最寄りのレーン中心までスライドして止まる
 void update_player(void) {
     uint8_t pad = joypad();
+    uint8_t target_x;
+    uint8_t current_lane;
 
     if (pad & J_LEFT) {
         if (player_x > FIRST_LANE_X) {
             player_x -= PLAYER_SPEED;
             if (player_x < FIRST_LANE_X) player_x = FIRST_LANE_X;
         }
-    }
-    if (pad & J_RIGHT) {
+    } else if (pad & J_RIGHT) {
         if (player_x < LAST_LANE_X) {
             player_x += PLAYER_SPEED;
             if (player_x > LAST_LANE_X) player_x = LAST_LANE_X;
+        }
+    } else {
+        // キーを離している: 最寄りレーン中心にスナップ
+        current_lane = get_player_lane();
+        target_x = lane_to_x(current_lane);
+        if (player_x < target_x) {
+            player_x += PLAYER_SPEED;
+            if (player_x > target_x) player_x = target_x;
+        } else if (player_x > target_x) {
+            player_x -= PLAYER_SPEED;
+            if (player_x < target_x) player_x = target_x;
         }
     }
     move_sprite(0, player_x, PLAYER_Y);
@@ -280,7 +295,7 @@ void update_enemies(void) {
                     min_y = enemies[j].y;
                 }
             }
-            enemies[i].y = min_y - LANE_WIDTH;
+            enemies[i].y = (min_y >= LANE_WIDTH) ? min_y - LANE_WIDTH : 0;
             enemies[i].lane = game_rand() % NUM_LANES;
         }
 
@@ -288,9 +303,18 @@ void update_enemies(void) {
     }
 }
 
-// ======== スコア表示 ========
+// ======== スコア表示（中央寄せ、偶数桁は中央、奇数桁は中央右寄せ） ========
 void display_score(void) {
-    gotoxy(9, 17);
+    uint8_t digits;
+    uint8_t col;
+    if (score < 10) digits = 1;
+    else if (score < 100) digits = 2;
+    else if (score < 1000) digits = 3;
+    else if (score < 10000) digits = 4;
+    else digits = 5;
+    // 画面幅20タイル。中央 = 10。右寄せ: col = 10 - digits/2
+    col = 10 - digits / 2;
+    gotoxy(col, 17);
     printf("%u  ", score);
 }
 
@@ -302,11 +326,8 @@ void show_game_over(void) {
         move_sprite(enemies[i].sprite_id, 0, 0);
     }
 
-    // 画面幅20タイル、壁内は列6-13（8タイル幅）
     gotoxy(6, 8);
     printf("GAMEOVER");
-    gotoxy(8, 10);
-    printf("%u", score);
     gotoxy(4, 12);
     printf("Press Any Key");
 
