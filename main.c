@@ -45,8 +45,10 @@ static const uint8_t WALL_TILE_IDX[1] = {1};
 #define GAME_AREA_LEFT 56    // ゲーム領域左端（左壁タイルの右隣）
 #define GAME_AREA_RIGHT 104  // ゲーム領域右端（右壁タイルの左隣、スプライト幅考慮）
 #define PLAYER_SPEED 2
-#define ASTEROID_SPEED 1
 #define PLAYER_Y 144         // 画面下端から1マス離れた位置
+
+// 障害物の最大数（スプライトID 1〜6を使用）
+#define MAX_OBSTACLES 6
 
 // プレイヤー構造体
 typedef struct {
@@ -64,34 +66,49 @@ typedef struct {
 
 // グローバル変数
 Player player;
-Asterisk asteroid;  // 1つだけ
+Asterisk obstacles[MAX_OBSTACLES];
 uint16_t score;
 uint8_t game_over;
 uint16_t frame_count;
 uint8_t sound_timer;
 
-// 疑似乱数生成（DIV_REGで初期シードにエントロピーを追加）
-uint8_t rand_seed = 42;
-uint8_t rand_seeded = 0;
+// 難易度パラメータ
+uint8_t obstacle_speed;     // 落下速度（ピクセル/フレーム）
+uint8_t spawn_interval;     // 生成間隔（フレーム数）
+uint8_t max_active;         // 同時出現数の上限
 
-uint8_t simple_rand() {
-    // 初回呼び出し時にDIVレジスタ（タイマー）でシードを撹拌
-    if (!rand_seeded) {
-        rand_seed ^= DIV_REG;
-        rand_seeded = 1;
+// 16-bit LFSR擬似乱数生成器（周期65535）
+// Fibonacci LFSR: タップ位置 bit 16, 15, 13, 4 (x^16 + x^15 + x^13 + x^4 + 1)
+// 最大長（maximal-length）が保証された多項式
+uint16_t lfsr_state = 0xACE1u;
+uint8_t lfsr_seeded = 0;
+
+uint8_t game_rand(void) {
+    uint8_t i;
+    uint16_t bit;
+    // 初回呼び出し時にDIVレジスタでシードを撹拌
+    if (!lfsr_seeded) {
+        lfsr_state ^= ((uint16_t)DIV_REG << 8) | DIV_REG;
+        if (lfsr_state == 0) lfsr_state = 0xACE1u;  // 0は禁止
+        lfsr_seeded = 1;
     }
-    rand_seed = (rand_seed * 73 + 17) % 251;
-    return rand_seed;
+    // 8回シフトして8ビットの乱数を生成
+    for (i = 0; i < 8; i++) {
+        // taps: bit 0 (=x^16), bit 1 (=x^15), bit 3 (=x^13), bit 12 (=x^4)
+        bit = ((lfsr_state >> 0) ^ (lfsr_state >> 1) ^ (lfsr_state >> 3) ^ (lfsr_state >> 12)) & 1u;
+        lfsr_state = (lfsr_state >> 1) | (bit << 15);
+    }
+    return (uint8_t)(lfsr_state & 0xFF);
 }
 
 // サウンド初期化と再生
-void init_sound() {
+void init_sound(void) {
     NR52_REG = 0x80;  // サウンド全体をON
     NR51_REG = 0x11;  // チャンネル1を両方のスピーカーへ
     NR50_REG = 0x77;  // 最大音量
 }
 
-void play_click_sound() {
+void play_click_sound(void) {
     NR10_REG = 0x00;
     NR11_REG = 0x81;  // 短いパルス
     NR12_REG = 0x43;  // 音量エンベロープ
@@ -99,8 +116,43 @@ void play_click_sound() {
     NR14_REG = 0x86;  // トリガー
 }
 
+// 難易度更新（スコアに応じて段階的に難しくなる）
+void update_difficulty(void) {
+    if (score < 5) {
+        // レベル1: 入門（障害物1個、遅め、60フレーム間隔）
+        obstacle_speed = 1;
+        spawn_interval = 60;
+        max_active = 1;
+    } else if (score < 15) {
+        // レベル2: 少し増える（障害物2個、45フレーム間隔）
+        obstacle_speed = 1;
+        spawn_interval = 45;
+        max_active = 2;
+    } else if (score < 30) {
+        // レベル3: 速くなる（障害物3個、速度2、40フレーム間隔）
+        obstacle_speed = 2;
+        spawn_interval = 40;
+        max_active = 3;
+    } else if (score < 50) {
+        // レベル4: さらに厳しく（障害物4個、30フレーム間隔）
+        obstacle_speed = 2;
+        spawn_interval = 30;
+        max_active = 4;
+    } else if (score < 80) {
+        // レベル5: 上級（障害物5個、速度3、25フレーム間隔）
+        obstacle_speed = 3;
+        spawn_interval = 25;
+        max_active = 5;
+    } else {
+        // レベル6: 最高難度（障害物6個、速度3、20フレーム間隔）
+        obstacle_speed = 3;
+        spawn_interval = 20;
+        max_active = MAX_OBSTACLES;
+    }
+}
+
 // プレイヤー初期化
-void init_player() {
+void init_player(void) {
     player.x = (GAME_AREA_LEFT + GAME_AREA_RIGHT) / 2;  // ゲーム領域の中央
     player.sprite_id = 0;
 
@@ -112,32 +164,50 @@ void init_player() {
     move_sprite(player.sprite_id, player.x, PLAYER_Y);
 }
 
-// アスタリスク初期化
-void init_asteroid() {
-    asteroid.active = 0;
-    asteroid.sprite_id = 1;
-    asteroid.x = 0;
-    asteroid.y = 0;
-    set_sprite_tile(asteroid.sprite_id, 1);
-    // Game Boy Colorでのみカラーパレットを設定
-    if (_cpu == CGB_TYPE) {
-        set_sprite_prop(asteroid.sprite_id, 0x10);  // パレット1（赤）を使用
+// 全障害物の初期化
+void init_obstacles(void) {
+    uint8_t i;
+    for (i = 0; i < MAX_OBSTACLES; i++) {
+        obstacles[i].active = 0;
+        obstacles[i].sprite_id = i + 1;  // スプライトID 1〜6
+        obstacles[i].x = 0;
+        obstacles[i].y = 0;
+        set_sprite_tile(obstacles[i].sprite_id, 1);
+        // Game Boy Colorでのみカラーパレットを設定
+        if (_cpu == CGB_TYPE) {
+            set_sprite_prop(obstacles[i].sprite_id, 0x10);  // パレット1（赤）を使用
+        }
+        move_sprite(obstacles[i].sprite_id, 0, 0);
     }
-    move_sprite(asteroid.sprite_id, 0, 0);
 }
 
-// 新しいアスタリスクを生成
-void spawn_asteroid() {
-    if (!asteroid.active) {
-        asteroid.active = 1;
-        // ゲーム領域内でランダムに配置
-        asteroid.x = GAME_AREA_LEFT + (simple_rand() % (GAME_AREA_RIGHT - GAME_AREA_LEFT));
-        asteroid.y = 16;
+// 新しいアスタリスクを生成（空きスロットに配置）
+void spawn_obstacle(void) {
+    uint8_t i;
+    uint8_t active_count = 0;
+
+    // 現在のアクティブ数をカウント
+    for (i = 0; i < MAX_OBSTACLES; i++) {
+        if (obstacles[i].active) active_count++;
+    }
+
+    // 上限に達していたら生成しない
+    if (active_count >= max_active) return;
+
+    // 空きスロットを探して生成
+    for (i = 0; i < MAX_OBSTACLES; i++) {
+        if (!obstacles[i].active) {
+            obstacles[i].active = 1;
+            // ゲーム領域内でランダムに配置
+            obstacles[i].x = GAME_AREA_LEFT + (game_rand() % (GAME_AREA_RIGHT - GAME_AREA_LEFT));
+            obstacles[i].y = 16;
+            return;
+        }
     }
 }
 
 // プレイヤー更新
-void update_player() {
+void update_player(void) {
     uint8_t joypad_state = joypad();
 
     if (joypad_state & J_LEFT) {
@@ -155,43 +225,50 @@ void update_player() {
     move_sprite(player.sprite_id, player.x, PLAYER_Y);
 }
 
-// アスタリスク更新
-void update_asteroid() {
-    if (asteroid.active) {
-        asteroid.y += ASTEROID_SPEED;
+// 全障害物の更新
+void update_obstacles(void) {
+    uint8_t i;
+    for (i = 0; i < MAX_OBSTACLES; i++) {
+        if (obstacles[i].active) {
+            obstacles[i].y += obstacle_speed;
 
-        // 画面下端を通り抜けたらスコア加算
-        if (asteroid.y > PLAYER_Y + 8) {
-            asteroid.active = 0;
-            move_sprite(asteroid.sprite_id, 0, 0);
-            score++;
-        } else {
-            move_sprite(asteroid.sprite_id, asteroid.x, asteroid.y);
+            // 画面下端を通り抜けたらスコア加算
+            if (obstacles[i].y > PLAYER_Y + 8) {
+                obstacles[i].active = 0;
+                move_sprite(obstacles[i].sprite_id, 0, 0);
+                score++;
+            } else {
+                move_sprite(obstacles[i].sprite_id, obstacles[i].x, obstacles[i].y);
+            }
         }
     }
 }
 
-// 衝突判定
-void check_collision() {
-    if (asteroid.active) {
-        // 簡易的な矩形衝突判定
-        if (asteroid.x >= player.x - 6 &&
-            asteroid.x <= player.x + 6 &&
-            asteroid.y >= PLAYER_Y - 6 &&
-            asteroid.y <= PLAYER_Y + 6) {
-            game_over = 1;
+// 衝突判定（全障害物をチェック）
+void check_collision(void) {
+    uint8_t i;
+    for (i = 0; i < MAX_OBSTACLES; i++) {
+        if (obstacles[i].active) {
+            // 簡易的な矩形衝突判定
+            if (obstacles[i].x >= player.x - 6 &&
+                obstacles[i].x <= player.x + 6 &&
+                obstacles[i].y >= PLAYER_Y - 6 &&
+                obstacles[i].y <= PLAYER_Y + 6) {
+                game_over = 1;
+                return;
+            }
         }
     }
 }
 
 // スコア表示（画面下部中央に数字のみ）
-void display_score() {
+void display_score(void) {
     gotoxy(9, 17);
     printf("%u  ", score);  // 末尾スペースで前の桁を消去
 }
 
 // 壁の描画
-void draw_walls() {
+void draw_walls(void) {
     uint8_t i;
 
     // 背景タイルデータを設定（タイル1に壁を設定）
@@ -220,7 +297,7 @@ void draw_walls() {
 // パレット設定（Game Boy Color専用）
 // GBCパレットは4色構成: [色0, 色1, 色2, 色3]
 // スプライトの色0は常に透明。タイルデータで両ビットプレーンが同値の場合、色3が使われる
-void setup_palette() {
+void setup_palette(void) {
     if (_cpu == CGB_TYPE) {
         // スプライトパレット0: プレイヤー（シアン）
         // 色0=透明, 色1=暗シアン, 色2=シアン, 色3=明シアン（実際に表示される色）
@@ -248,14 +325,14 @@ void setup_palette() {
 }
 
 // ゲーム初期化
-void init_game() {
+void init_game(void) {
     // スプライトデータ設定
     set_sprite_data(0, 1, player_sprite);
     set_sprite_data(1, 1, asterisk_sprite);
 
-    // プレイヤーとアスタリスクを初期化
+    // プレイヤーと障害物を初期化
     init_player();
-    init_asteroid();
+    init_obstacles();
 
     // サウンド初期化
     init_sound();
@@ -274,13 +351,20 @@ void init_game() {
     game_over = 0;
     frame_count = 0;
     sound_timer = 0;
+
+    // 初期難易度を設定
+    update_difficulty();
 }
 
 // ゲームオーバー画面
-void show_game_over() {
-    // アスタリスクスプライトを画面外に退避
-    move_sprite(asteroid.sprite_id, 0, 0);
-    asteroid.active = 0;
+void show_game_over(void) {
+    uint8_t i;
+
+    // 全障害物スプライトを画面外に退避
+    for (i = 0; i < MAX_OBSTACLES; i++) {
+        move_sprite(obstacles[i].sprite_id, 0, 0);
+        obstacles[i].active = 0;
+    }
 
     printf("\x1B[8;6HGAME OVER");
     printf("\x1B[10;9H%u", score);
@@ -298,11 +382,12 @@ void show_game_over() {
             score = 0;
             game_over = 0;
             frame_count = 0;
-            rand_seeded = 0;  // 次のゲームで新しいシードを使う
+            lfsr_seeded = 0;  // 次のゲームで新しいシードを使う
             init_player();
-            init_asteroid();
+            init_obstacles();
             cls();
             draw_walls();
+            update_difficulty();
             break;
         }
         wait_vbl_done();
@@ -310,7 +395,7 @@ void show_game_over() {
 }
 
 // メインループ
-void main() {
+void main(void) {
     init_game();
 
     while (1) {
@@ -318,16 +403,20 @@ void main() {
             // プレイヤー更新
             update_player();
 
-            // アスタリスク更新
-            update_asteroid();
+            // 障害物更新
+            update_obstacles();
 
             // 衝突判定
             check_collision();
 
-            // 定期的に新しいアスタリスクを生成（1行に1つ）
+            // 難易度をスコアに応じて更新
+            update_difficulty();
+
+            // 定期的に新しい障害物を生成
             frame_count++;
-            if (frame_count % 60 == 0) {
-                spawn_asteroid();
+            if (frame_count >= spawn_interval) {
+                spawn_obstacle();
+                frame_count = 0;
             }
 
             // カタカタ音を定期的に再生
