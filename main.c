@@ -33,7 +33,9 @@ const uint8_t wall_tile[] = {
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
     0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
 };
-static const uint8_t WALL_TILE_IDX[1] = {1};
+// フォントと衝突しないよう高いタイルインデックスを使用
+#define WALL_TILE_ID 128
+static const uint8_t WALL_TILE_IDX[1] = {WALL_TILE_ID};
 
 // ======== ゲーム定数 ========
 #define NUM_LANES     8     // 通路の列数（タイル列6-13）
@@ -109,7 +111,7 @@ uint8_t lane_to_x(uint8_t lane) {
 // ======== 壁の描画 ========
 void draw_walls(void) {
     uint8_t i;
-    set_bkg_data(1, 1, wall_tile);
+    set_bkg_data(WALL_TILE_ID, 1, wall_tile);
     for (i = 0; i < 18; i++) {
         set_bkg_tiles(5, i, 1, 1, WALL_TILE_IDX);
         set_bkg_tiles(14, i, 1, 1, WALL_TILE_IDX);
@@ -173,6 +175,8 @@ void init_enemies(void) {
 }
 
 void init_game(void) {
+    cls();  // 画面クリア（ゴミタイル除去）
+
     set_sprite_data(0, 1, player_sprite);
     set_sprite_data(1, 1, asterisk_sprite);
     init_player();
@@ -275,9 +279,13 @@ void show_game_over(void) {
         move_sprite(enemies[i].sprite_id, 0, 0);
     }
 
-    printf("\x1B[8;6HGAME OVER");
-    printf("\x1B[10;9H%u", score);
-    printf("\x1B[12;4HPress Any Key");
+    // 画面幅20タイル、壁内は列6-13（8タイル幅）
+    gotoxy(6, 8);
+    printf("GAMEOVER");
+    gotoxy(8, 10);
+    printf("%u", score);
+    gotoxy(4, 12);
+    printf("Press Any Key");
 
     while (joypad()) {
         wait_vbl_done();
