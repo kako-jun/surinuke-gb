@@ -175,21 +175,44 @@ void init_enemies(void) {
 }
 
 void init_game(void) {
-    cls();  // 画面クリア（ゴミタイル除去）
-
+    DISPLAY_OFF;
+    cls();
     set_sprite_data(0, 1, player_sprite);
     set_sprite_data(1, 1, asterisk_sprite);
+    init_sound();
+    setup_palette();
+    draw_walls();
     init_player();
     init_enemies();
-    init_sound();
-    draw_walls();
-    setup_palette();
     SHOW_SPRITES;
     DISPLAY_ON;
 
     score = 0;
     game_over = 0;
     fall_speed = 1;
+}
+
+void show_title(void) {
+    DISPLAY_OFF;
+    cls();
+    setup_palette();
+    draw_walls();
+    gotoxy(6, 7);
+    printf("SURINUKE");
+    gotoxy(4, 11);
+    printf("Press START");
+    DISPLAY_ON;
+
+    while (joypad() & J_START) {
+        wait_vbl_done();
+    }
+    while (!(joypad() & J_START)) {
+        lfsr_state ^= DIV_REG;
+        wait_vbl_done();
+    }
+    while (joypad() & J_START) {
+        wait_vbl_done();
+    }
 }
 
 // ======== 難易度 ========
@@ -310,6 +333,7 @@ void show_game_over(void) {
 
 // ======== メインループ ========
 void main(void) {
+    show_title();
     init_game();
 
     while (1) {
